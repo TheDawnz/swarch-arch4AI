@@ -1,14 +1,14 @@
 # Task 4: Deployment topologies and trade-offs
 
-**Name / ชื่อ:**
+**Name / ชื่อ:** อัครชัย ยงสุวรรณกุล
 
-**Student ID / รหัสนิสิต:**
+**Student ID / รหัสนิสิต:** 6630357821
 
 This is **individual work**: each student completes and submits their own copy, in their own fork.
 
 *งานนี้เป็น**งานเดี่ยว** นิสิตแต่ละคนทำและส่งงานของตัวเอง ใน fork ของตัวเอง*
 
-**Scenario (A, B or C) / Scenario ที่เลือก:**
+**Scenario (A, B or C) / Scenario ที่เลือก:** B
 
 Choose **one** scenario below. If the last digit of your student ID is odd, take A or B; if it is even, take B or C. Use your measurements from Tutorial 6 as evidence: cite run names from `results/runs.csv`. Answer in Thai or English.
 
@@ -58,9 +58,9 @@ The three most important quality requirements for your scenario, each with a num
 
 | # | Quality | Requirement |
 |---|---|---|
-| 1 | | |
-| 2 | | |
-| 3 | | |
+| 1 | Offline availability | ต้องรับและเก็บรีวิวได้ 100% แม้ tablet offline |
+| 2 | Data freshness | รีวิวที่ sync แล้วต้องได้รับ label อย่างน้อย 99% ภายในสิ้นวัน หรือภายใน 24 ชั่วโมง |
+| 3 | Usability | การกดส่งรีวิวบน tablet ต้องตอบรับภายใน ไม่เกิน 1 วินาที แม้ไม่มีเครือข่าย |
 
 ## 2. Design / การออกแบบ
 
@@ -70,14 +70,23 @@ Your topology, the patterns you add, and a container-level diagram (C4 level 2).
 
 ```mermaid
 C4Container
-    title Your design: container diagram
-    %% Replace the example below with your own people, containers and relationships.
-    %% See the CampusEats C4 diagram in README.md for the full syntax.
-    Person(customer, "Customer", "Writes restaurant reviews")
+    title Canteen Kiosk Offline-First Design
+
+    Person(student, "Student", "Writes a review")
+
     System_Boundary(campuseats, "CampusEats") {
-        Container(review, "Review service", "Python, FastAPI", "What it does")
+        Container(tablet, "Kiosk Tablet", "Mobile app", "Accepts reviews and runs the small model locally")
+        ContainerDb(outbox, "Local Outbox", "Embedded database", "Stores reviews while offline")
+        Container(sync, "Sync API", "FastAPI", "Receives reviews when the tablet is online")
+        ContainerDb(storage, "Review Storage", "Database", "Stores reviews and sentiment labels")
+        Container(owner, "Owner Dashboard", "Web app", "Displays sentiment labels")
     }
-    Rel(customer, review, "Posts reviews", "HTTP/JSON")
+
+    Rel(student, tablet, "Submits review")
+    Rel(tablet, outbox, "Stores review and local label")
+    Rel(tablet, sync, "Synchronizes when online", "HTTPS/JSON")
+    Rel(sync, storage, "Persists reviews and labels")
+    Rel(owner, storage, "Reads labels")
 ```
 
 ## 3. Evidence / หลักฐาน
@@ -88,8 +97,8 @@ Which runs support your choice? Show the numbers and, for scenario A, the capaci
 
 | Run | What it shows / แสดงอะไร |
 |---|---|
-| | |
-| | |
+| t0-small | เนื่องจากขนาดเล็กและเร็วอาจจะ รันบน tablet แบบ offline ได้ |
+| t3-cache | เนื่องจากการรีวิวของนิสิตน่าจะเป็นแบบซ้ำๆเยอะ การใช้ cache น่าจะได้ประสิทธิภาพสูง |
 
 ## 4. ADR
 
@@ -97,20 +106,20 @@ Use the ADR format from W5.
 
 *ใช้รูปแบบ ADR จาก W5*
 
-**Title:**
+**Title:** Offline-first sentiment processing for canteen kiosks
 
 **Status:** Proposed
 
-**Context:**
+**Context:** อธิบายว่า tablet หลุด Wi‑Fi หลายนาที ระบบต้องรับรีวิวทุกรายการ และต้องมี label ภายในสิ้นวัน
 
-**Decision:**
+**Decision:**  ระบุ T2 พร้อม local outbox/database, small model บน tablet, และ sync/retry เมื่อกลับมา online
 
 **Consequences:**
-- Positive:
-- Negative:
+- Positive: รับรีวิวได้แม้ offline และลดการพึ่งพา network
+- Negative: ต้องจัดการ storage บนเครื่อง, retry, duplicate และ model update
 
 **Alternatives considered:** at least one topology you rejected, and why.
 
 *อย่างน้อยหนึ่ง topology ที่ไม่เลือก และเหตุผล*
 
->
+>ไม่เลือก T4 เพราะแม้รองรับการประมวลผลแบบ batch ได้ดี แต่ยังต้องมี local storage และกลไก sync เมื่อ tablet กลับมา online ทำให้สถาปัตยกรรมซับซ้อนกว่า T2 และไม่จำเป็นสำหรับการสร้าง label บน tablet ทันที
